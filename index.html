@@ -212,11 +212,25 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    let items = JSON.parse(localStorage.getItem('shoppingList') || '[]');
+    const SUPABASE_URL = 'https://vjpadwuicscxhtnahyku.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqcGFkd3VpY3NjeGh0bmFoeWt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MjA4NDgsImV4cCI6MjA5MjM5Njg0OH0.pvt4y9mnYieX69TvV9oxAQXOAFRG4JgdiAiPA4-iKq4';
 
-    function save() {
-      localStorage.setItem('shoppingList', JSON.stringify(items));
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let items = [];
+
+    async function loadItems() {
+      const { data, error } = await db
+        .from('shopping_items')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) { console.error(error); return; }
+      items = data;
+      render();
     }
 
     function render() {
@@ -236,14 +250,14 @@
       const checkedCount = items.filter(i => i.checked).length;
       statsText.textContent = `총 ${items.length}개 · 완료 ${checkedCount}개`;
 
-      items.forEach((item, index) => {
+      items.forEach((item) => {
         const li = document.createElement('li');
         li.className = 'list-item' + (item.checked ? ' checked' : '');
 
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = item.checked;
-        checkbox.addEventListener('change', () => toggleItem(index));
+        checkbox.addEventListener('change', () => toggleItem(item.id));
 
         const span = document.createElement('span');
         span.className = 'item-text';
@@ -253,7 +267,7 @@
         delBtn.className = 'btn-delete';
         delBtn.textContent = '✕';
         delBtn.title = '삭제';
-        delBtn.addEventListener('click', () => deleteItem(index));
+        delBtn.addEventListener('click', () => deleteItem(item.id));
 
         li.appendChild(checkbox);
         li.appendChild(span);
@@ -262,33 +276,57 @@
       });
     }
 
-    function addItem() {
+    async function addItem() {
       const input = document.getElementById('itemInput');
       const text = input.value.trim();
       if (!text) return;
 
-      items.push({ text, checked: false });
-      save();
+      const { data, error } = await db
+        .from('shopping_items')
+        .insert({ text, checked: false })
+        .select()
+        .single();
+
+      if (error) { console.error(error); return; }
+      items.push(data);
       render();
       input.value = '';
       input.focus();
     }
 
-    function toggleItem(index) {
-      items[index].checked = !items[index].checked;
-      save();
+    async function toggleItem(id) {
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+
+      const { error } = await db
+        .from('shopping_items')
+        .update({ checked: !item.checked })
+        .eq('id', id);
+
+      if (error) { console.error(error); return; }
+      item.checked = !item.checked;
       render();
     }
 
-    function deleteItem(index) {
-      items.splice(index, 1);
-      save();
+    async function deleteItem(id) {
+      const { error } = await db
+        .from('shopping_items')
+        .delete()
+        .eq('id', id);
+
+      if (error) { console.error(error); return; }
+      items = items.filter(i => i.id !== id);
       render();
     }
 
-    function clearChecked() {
+    async function clearChecked() {
+      const { error } = await db
+        .from('shopping_items')
+        .delete()
+        .eq('checked', true);
+
+      if (error) { console.error(error); return; }
       items = items.filter(i => !i.checked);
-      save();
       render();
     }
 
@@ -296,7 +334,7 @@
       if (e.key === 'Enter') addItem();
     });
 
-    render();
+    loadItems();
   </script>
 </body>
 </html>
